@@ -1,6 +1,24 @@
+
+# Environment variables and secrets
 .env
+.env.*
+!.env.example
+
+# Databases
 *.db
-node_modules/
+*.sqlite
+*.sqlite3
+
+# Python
 __pycache__/
+*.py[cod]
 .venv/
+venv/
+
+# Node
+node_modules/
 dist/
+
+# Test and tooling caches
+.pytest_cache/
+.coverage
