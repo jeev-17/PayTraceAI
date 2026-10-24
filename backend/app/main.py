@@ -15,6 +15,13 @@ from app.schemas import HealthResponse
 logger = logging.getLogger(__name__)
 
 
+def normalize_origin(origin: str) -> str:
+    origin = origin.rstrip("/")
+    if origin.startswith(("http://", "https://")):
+        return origin
+    return f"https://{origin}"
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
@@ -24,7 +31,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="PayTrace AI", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=[normalize_origin(settings.frontend_origin)],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

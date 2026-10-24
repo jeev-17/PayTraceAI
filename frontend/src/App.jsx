@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+const apiBaseUrl = configuredApiBaseUrl
+  ? (
+      /^https?:\/\//i.test(configuredApiBaseUrl)
+        ? configuredApiBaseUrl
+        : `https://${configuredApiBaseUrl}`
+    ).replace(/\/+$/, "")
+  : "";
 
 export default function App() {
   const [health, setHealth] = useState(null);
