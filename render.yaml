@@ -1,3 +1,4 @@
+
 services:
   - type: web
     name: paytrace-ai-api
@@ -14,12 +15,13 @@ services:
           property: connectionString
       - key: FRONTEND_ORIGIN
         fromService:
-          type: static
+          type: web
           name: paytrace-ai-frontend
           property: host
 
-  - type: static
+  - type: web
     name: paytrace-ai-frontend
+    runtime: static
     buildCommand: cd frontend && npm ci && npm run build
     staticPublishPath: frontend/dist
     envVars:
