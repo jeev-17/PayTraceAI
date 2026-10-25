@@ -1,4 +1,5 @@
-
+import logging
+logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import uuid4
@@ -42,9 +43,10 @@ def run_simulation(db: Session, scenario_id: str) -> dict[str, object]:
     )
 
     try:
+        logger.info("Simulation checkpoint 1: adding order")
         db.add(order)
         db.flush()
-
+        logger.info("Simulation checkpoint 2: order flushed")
         audit = AuditRecord(
             actor="simulation",
             action="SIMULATION_RUN",
@@ -57,9 +59,12 @@ def run_simulation(db: Session, scenario_id: str) -> dict[str, object]:
             },
         )
         db.add(audit)
+        
+        logger.info("Simulation checkpoint 3: committing transaction")
         db.commit()
+        logger.info("Simulation checkpoint 4: transaction committed")
         db.refresh(order)
-
+        logger.info("Simulation checkpoint 5: order refreshed")
         return {
             "scenario_id": scenario_id,
             "source": "simulated",
