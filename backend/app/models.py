@@ -60,6 +60,12 @@ def enum_column(enum_type: type[Enum]) -> SQLAlchemyEnum:
 
 class Order(Base):
     __tablename__ = "orders"
+    idempotency_key: Mapped[str | None] = mapped_column(
+    String(128),
+    unique=True,
+    nullable=True,
+    index=True,
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     paypal_order_id: Mapped[str] = mapped_column(String(128), unique=True, index=True)

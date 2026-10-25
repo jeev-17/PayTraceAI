@@ -1,6 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
-
+from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models import (
@@ -100,3 +100,14 @@ class InvestigateIncidentRequest(BaseModel):
 
 class SimulationRunRequest(BaseModel):
     scenario_id: str = Field(min_length=1, max_length=128)
+
+class InvestigationResponse(BaseModel):
+    incident_id: int
+    question: str
+    summary: str
+    findings: list[str]
+    hypotheses: list[str]
+    recommended_checks: list[str]
+    evidence: list[dict[str, Any]]
+    limitations: list[str]
+    generated_by: str
