@@ -43,13 +43,23 @@ app.include_router(incidents.router)
 app.include_router(simulations.router)
 
 # Configure frontend access
+
+# Configure frontend access
+allowed_origins = {
+    normalize_origin(settings.frontend_origin),
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://paytrace-ai-frontend.onrender.com",
+}
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[normalize_origin(settings.frontend_origin)],
+    allow_origins=sorted(allowed_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 @app.exception_handler(StarletteHTTPException)
