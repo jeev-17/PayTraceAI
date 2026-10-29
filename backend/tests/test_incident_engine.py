@@ -135,3 +135,16 @@ def test_completed_local_order_does_not_trigger_capture_mismatch(db):
         incident.rule_id == "CAPTURE_STATUS_MISMATCH"
         for incident in incidents
     )
+def test_pending_timeout_links_related_payment_events(db):
+    order = make_order(db)
+    event = make_event(db, order=order)
+
+    incidents = detect_incidents(db)
+
+    timeout_incident = next(
+        incident
+        for incident in incidents
+        if incident.rule_id == "PENDING_ORDER_TIMEOUT"
+    )
+
+    assert timeout_incident.evidence_event_ids == [event.id]
