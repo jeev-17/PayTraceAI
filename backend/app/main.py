@@ -1,7 +1,6 @@
-
 import logging
 from contextlib import asynccontextmanager
-
+from app.routers import events
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +40,7 @@ app.include_router(orders.router)
 app.include_router(webhooks.router)
 app.include_router(incidents.router)
 app.include_router(simulations.router)
+app.include_router(events.router) 
 
 # Configure frontend access
 
