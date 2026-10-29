@@ -45,16 +45,16 @@ app.include_router(events.router)
 # Configure frontend access
 
 # Configure frontend access
-allowed_origins = {
+allow_origins = {
     normalize_origin(settings.frontend_origin),
     "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
     "https://paytrace-ai-frontend.onrender.com",
 }
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=sorted(allowed_origins),
+    allow_origins=sorted(allow_origins),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
