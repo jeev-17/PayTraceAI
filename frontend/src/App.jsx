@@ -69,6 +69,24 @@ function formatDate(value) {
   return date.toLocaleString();
 }
 
+function formatStatus(value) {
+  if (!value) return "Unknown";
+
+  return String(value)
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function StatusBadge({ value }) {
+  const normalized = String(value ?? "unknown").toLowerCase();
+
+  return (
+    <span className={`evidence-badge evidence-${normalized}`}>
+      {formatStatus(value)}
+    </span>
+  );
+}
+
 function ConfigurationList({ config }) {
   if (!config || typeof config !== "object") {
     return <p className="empty-state">Configuration status unavailable.</p>;
@@ -188,44 +206,87 @@ function IncidentDetails({ incident, onBack }) {
       <section className="detail-section">
         <h3>Incident details</h3>
 
-        <dl className="incident-metadata">
-          <div>
-            <dt>Incident ID</dt>
-            <dd>{incident.id}</dd>
-          </div>
-          <div>
-            <dt>Rule</dt>
-            <dd>{incident.rule_id}</dd>
-          </div>
-          <div>
-            <dt>Severity</dt>
-            <dd>{incident.severity}</dd>
-          </div>
-          <div>
-            <dt>Status</dt>
-            <dd>{incident.status}</dd>
-          </div>
-          <div>
-            <dt>Related order ID</dt>
-            <dd>{incident.order_id ?? "Not linked"}</dd>
-          </div>
-          <div>
-            <dt>Deduplication key</dt>
-            <dd>{incident.dedup_key || "Not available"}</dd>
-          </div>
-          <div>
-            <dt>Created at</dt>
-            <dd>{formatDate(incident.created_at)}</dd>
-          </div>
-          <div>
-            <dt>Resolved at</dt>
-            <dd>{formatDate(incident.resolved_at)}</dd>
-          </div>
-          <div>
-            <dt>Resolution reason</dt>
-            <dd>{incident.resolution_reason || "Not resolved"}</dd>
-          </div>
-        </dl>
+        
+<div className="evidence-card-grid">
+  <article className="evidence-card">
+    <h4>Event information</h4>
+    <dl>
+      <div>
+        <dt>Event type</dt>
+        <dd>{selectedEvent.event_type || "Unknown"}</dd>
+      </div>
+      <div>
+        <dt>PayPal event ID</dt>
+        <dd>{selectedEvent.paypal_event_id || "Not available"}</dd>
+      </div>
+      <div>
+        <dt>Resource ID</dt>
+        <dd>{selectedEvent.resource_id || "Not available"}</dd>
+      </div>
+    </dl>
+  </article>
+
+  <article className="evidence-card">
+    <h4>Order relationship</h4>
+    <dl>
+      <div>
+        <dt>Local order ID</dt>
+        <dd>{selectedEvent.order_id ?? "Not linked"}</dd>
+      </div>
+      <div>
+        <dt>PayPal order reference</dt>
+        <dd>{selectedEvent.paypal_order_ref || "Not available"}</dd>
+      </div>
+      <div>
+        <dt>Source</dt>
+        <dd>{formatStatus(selectedEvent.source)}</dd>
+      </div>
+    </dl>
+  </article>
+
+  <article className="evidence-card">
+    <h4>Verification</h4>
+    <dl>
+      <div>
+        <dt>Verification status</dt>
+        <dd>
+          <StatusBadge value={selectedEvent.verification_status} />
+        </dd>
+      </div>
+      <div>
+        <dt>Duplicate delivery</dt>
+        <dd>
+          <StatusBadge
+            value={
+              selectedEvent.is_duplicate_delivery
+                ? "duplicate"
+                : "not_duplicate"
+            }
+          />
+        </dd>
+      </div>
+    </dl>
+  </article>
+
+  <article className="evidence-card">
+    <h4>Event timestamps</h4>
+    <dl>
+      <div>
+        <dt>Delivery received</dt>
+        <dd>{formatDate(selectedEvent.delivery_received_at)}</dd>
+      </div>
+      <div>
+        <dt>Event created</dt>
+        <dd>{formatDate(selectedEvent.event_created_at)}</dd>
+      </div>
+      <div>
+        <dt>Processed</dt>
+        <dd>{formatDate(selectedEvent.processed_at)}</dd>
+      </div>
+    </dl>
+  </article>
+</div>
+
       </section>
 
       <section className="detail-section">
