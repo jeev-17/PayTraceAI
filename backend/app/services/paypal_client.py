@@ -222,6 +222,7 @@ class PayPalClient:
             "GET",
             f"/v2/checkout/orders/{paypal_order_id}",
         )
+
     def verify_webhook_signature(
         self,
         headers: dict[str, str],
@@ -229,6 +230,7 @@ class PayPalClient:
         webhook_event: dict,
     ) -> bool:
         """Ask PayPal to verify a webhook's signature."""
+
         required_headers = {
             "auth_algo": "paypal-auth-algo",
             "cert_url": "paypal-cert-url",
@@ -243,14 +245,27 @@ class PayPalClient:
         }
 
         verification_payload = {}
+        missing_headers = []
 
         for payload_key, header_key in required_headers.items():
             value = normalized_headers.get(header_key)
+
             if not value:
-                return False
-            verification_payload[payload_key] = value
+                missing_headers.append(header_key)
+            else:
+                verification_payload[payload_key] = value
+
+        if missing_headers:
+            logger.warning(
+                "PayPal webhook verification rejected: missing headers %s",
+                missing_headers,
+            )
+            return False
 
         if not webhook_id or not isinstance(webhook_event, dict):
+            logger.warning(
+                "PayPal webhook verification rejected: webhook ID or event is invalid."
+            )
             return False
 
         verification_payload["webhook_id"] = webhook_id
@@ -262,4 +277,14 @@ class PayPalClient:
             json=verification_payload,
         )
 
-        return result.get("verification_status") == "SUCCESS"
+        verification_status = result.get("verification_status")
+
+        if verification_status != "SUCCESS":
+            logger.warning(
+                "PayPal webhook signature verification returned status: %s",
+                verification_status,
+            )
+            return False
+
+        logger.info("PayPal webhook signature verified successfully.")
+        return True

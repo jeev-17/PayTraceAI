@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api/webhooks", tags=["webhooks"])
 def parse_event_time(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
+
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
@@ -37,7 +38,10 @@ async def receive_paypal_webhook(
     request: Request,
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
+
     if not settings.paypal_webhook_id:
+        logger.error("PayPal webhook verification is not configured.")
+
         raise HTTPException(
             status_code=503,
             detail="PayPal webhook verification is not configured.",
@@ -46,10 +50,20 @@ async def receive_paypal_webhook(
     try:
         payload = await request.json()
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload.")
+        logger.warning("PayPal webhook rejected: invalid JSON payload.")
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid JSON payload.",
+        )
 
     if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Expected a JSON object.")
+        logger.warning("PayPal webhook rejected: expected a JSON object.")
+
+        raise HTTPException(
+            status_code=400,
+            detail="Expected a JSON object.",
+        )
 
     event_id = payload.get("id")
     event_type = payload.get("event_type")
@@ -62,6 +76,10 @@ async def receive_paypal_webhook(
         or not event_type
         or not isinstance(resource, dict)
     ):
+        logger.warning(
+            "PayPal webhook rejected: required event fields are missing."
+        )
+
         raise HTTPException(
             status_code=400,
             detail="Webhook payload is missing required event fields.",
@@ -76,28 +94,43 @@ async def receive_paypal_webhook(
             webhook_id=settings.paypal_webhook_id,
             webhook_event=payload,
         )
+
     except PayPalError:
-        logger.exception("PayPal webhook signature verification failed")
+        logger.exception(
+            "PayPal webhook signature verification service failed."
+        )
+
         raise HTTPException(
             status_code=503,
             detail="Webhook verification service is unavailable.",
         )
+
     finally:
         client.close()
 
     if not verified:
+        logger.warning(
+            "PayPal webhook rejected: signature verification returned false. "
+            "event_id=%s event_type=%s",
+            event_id,
+            event_type,
+        )
+
         raise HTTPException(
             status_code=400,
             detail="PayPal webhook signature could not be verified.",
         )
 
     resource_id = resource.get("id")
+
     supplementary = resource.get("supplementary_data")
+
     related_ids = (
         supplementary.get("related_ids", {})
         if isinstance(supplementary, dict)
         else {}
     )
+
     paypal_order_ref = (
         related_ids.get("order_id")
         if isinstance(related_ids, dict)
@@ -106,10 +139,12 @@ async def receive_paypal_webhook(
 
     if not isinstance(paypal_order_ref, str):
         paypal_order_ref = None
+
     if not isinstance(resource_id, str):
         resource_id = None
 
     order = None
+
     if paypal_order_ref:
         order = (
             db.query(Order)
@@ -127,7 +162,15 @@ async def receive_paypal_webhook(
     )
 
     if existing:
-        return {"status": "duplicate", "event_id": event_id}
+        logger.info(
+            "Duplicate PayPal webhook delivery ignored. event_id=%s",
+            event_id,
+        )
+
+        return {
+            "status": "duplicate",
+            "event_id": event_id,
+        }
 
     event = PaymentEvent(
         paypal_event_id=event_id,
@@ -146,9 +189,10 @@ async def receive_paypal_webhook(
     try:
         db.add(event)
         db.commit()
+
     except IntegrityError:
         db.rollback()
-        # Another request may have persisted the same event concurrently.
+
         duplicate = (
             db.query(PaymentEvent)
             .filter(
@@ -157,18 +201,47 @@ async def receive_paypal_webhook(
             )
             .first()
         )
+
         if duplicate:
-            return {"status": "duplicate", "event_id": event_id}
-        raise HTTPException(
-            status_code=500,
-            detail="Could not persist webhook event.",
+            logger.info(
+                "Concurrent duplicate PayPal webhook ignored. event_id=%s",
+                event_id,
+            )
+
+            return {
+                "status": "duplicate",
+                "event_id": event_id,
+            }
+
+        logger.exception(
+            "Could not persist PayPal webhook event."
         )
-    except Exception:
-        db.rollback()
-        logger.exception("Could not persist verified PayPal webhook")
+
         raise HTTPException(
             status_code=500,
             detail="Could not persist webhook event.",
         )
 
-    return {"status": "received", "event_id": event_id}
+    except Exception:
+        db.rollback()
+
+        logger.exception(
+            "Could not persist verified PayPal webhook."
+        )
+
+        raise HTTPException(
+            status_code=500,
+            detail="Could not persist webhook event.",
+        )
+
+    logger.info(
+        "PayPal webhook received and stored successfully. "
+        "event_id=%s event_type=%s",
+        event_id,
+        event_type,
+    )
+
+    return {
+        "status": "received",
+        "event_id": event_id,
+    }
