@@ -24,7 +24,6 @@ const configurationLabels = {
   pending_threshold_minutes: "Pending Threshold",
 };
 
-
 async function fetchJson(path) {
   const response = await fetch(`${apiBaseUrl}${path}`);
 
@@ -57,6 +56,7 @@ async function postJson(path, body) {
 
   return payload;
 }
+
 function formatDate(value) {
   if (!value) return "Not available";
 
@@ -160,7 +160,6 @@ function IncidentCard({ incident, onSelect }) {
   );
 }
 
-
 function IncidentDetails({ incident, onBack }) {
   const evidenceIds = Array.isArray(incident.evidence_event_ids)
     ? incident.evidence_event_ids
@@ -206,87 +205,28 @@ function IncidentDetails({ incident, onBack }) {
       <section className="detail-section">
         <h3>Incident details</h3>
 
-        
-<div className="evidence-card-grid">
-  <article className="evidence-card">
-    <h4>Event information</h4>
-    <dl>
-      <div>
-        <dt>Event type</dt>
-        <dd>{selectedEvent.event_type || "Unknown"}</dd>
-      </div>
-      <div>
-        <dt>PayPal event ID</dt>
-        <dd>{selectedEvent.paypal_event_id || "Not available"}</dd>
-      </div>
-      <div>
-        <dt>Resource ID</dt>
-        <dd>{selectedEvent.resource_id || "Not available"}</dd>
-      </div>
-    </dl>
-  </article>
-
-  <article className="evidence-card">
-    <h4>Order relationship</h4>
-    <dl>
-      <div>
-        <dt>Local order ID</dt>
-        <dd>{selectedEvent.order_id ?? "Not linked"}</dd>
-      </div>
-      <div>
-        <dt>PayPal order reference</dt>
-        <dd>{selectedEvent.paypal_order_ref || "Not available"}</dd>
-      </div>
-      <div>
-        <dt>Source</dt>
-        <dd>{formatStatus(selectedEvent.source)}</dd>
-      </div>
-    </dl>
-  </article>
-
-  <article className="evidence-card">
-    <h4>Verification</h4>
-    <dl>
-      <div>
-        <dt>Verification status</dt>
-        <dd>
-          <StatusBadge value={selectedEvent.verification_status} />
-        </dd>
-      </div>
-      <div>
-        <dt>Duplicate delivery</dt>
-        <dd>
-          <StatusBadge
-            value={
-              selectedEvent.is_duplicate_delivery
-                ? "duplicate"
-                : "not_duplicate"
-            }
-          />
-        </dd>
-      </div>
-    </dl>
-  </article>
-
-  <article className="evidence-card">
-    <h4>Event timestamps</h4>
-    <dl>
-      <div>
-        <dt>Delivery received</dt>
-        <dd>{formatDate(selectedEvent.delivery_received_at)}</dd>
-      </div>
-      <div>
-        <dt>Event created</dt>
-        <dd>{formatDate(selectedEvent.event_created_at)}</dd>
-      </div>
-      <div>
-        <dt>Processed</dt>
-        <dd>{formatDate(selectedEvent.processed_at)}</dd>
-      </div>
-    </dl>
-  </article>
-</div>
-
+        <dl className="incident-metadata">
+          {[
+            ["Incident ID", incident.id],
+            ["Rule", incident.rule_id],
+            ["Severity", incident.severity],
+            ["Status", incident.status],
+            ["Related order ID", incident.order_id],
+            ["Deduplication key", incident.dedup_key],
+            ["Created at", formatDate(incident.created_at)],
+            ["Resolved at", formatDate(incident.resolved_at)],
+            ["Resolution reason", incident.resolution_reason],
+          ].map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>
+                {value == null || value === ""
+                  ? "Not available"
+                  : String(value)}
+              </dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       <section className="detail-section">
@@ -399,9 +339,7 @@ function IncidentDetails({ incident, onBack }) {
                 <ul>
                   {report.evidence.map((item, index) => (
                     <li key={index}>
-                      <pre>
-                        {JSON.stringify(item, null, 2)}
-                      </pre>
+                      <pre>{JSON.stringify(item, null, 2)}</pre>
                     </li>
                   ))}
                 </ul>
@@ -435,7 +373,6 @@ function IncidentDetails({ incident, onBack }) {
   );
 }
 
-
 function EventExplorer() {
   const [events, setEvents] = useState([]);
   const [total, setTotal] = useState(0);
@@ -460,13 +397,16 @@ function EventExplorer() {
       });
 
       if (source) params.set("source", source);
+
       if (eventType.trim()) {
         params.set("event_type", eventType.trim());
       }
+
       if (orderId.trim()) {
         if (!/^\d+$/.test(orderId.trim())) {
           throw new Error("Order ID must be a positive integer.");
         }
+
         params.set("order_id", orderId.trim());
       }
 
@@ -493,9 +433,10 @@ function EventExplorer() {
   function applyFilters(event) {
     event.preventDefault();
     setOffset(0);
-    // The effect loads the events when offset changes.
-    // If already at offset zero, load directly.
-    if (offset === 0) loadEvents();
+
+    if (offset === 0) {
+      loadEvents();
+    }
   }
 
   const pageNumber = Math.floor(offset / limit) + 1;
@@ -511,6 +452,7 @@ function EventExplorer() {
             Inspect stored payment events and webhook verification metadata.
           </p>
         </div>
+
         <button
           type="button"
           className="refresh-button"
@@ -532,26 +474,86 @@ function EventExplorer() {
           </button>
 
           <h3>Event #{selectedEvent.id}</h3>
-          <dl className="detail-grid">
-            {[
-              ["Event type", selectedEvent.event_type],
-              ["PayPal event ID", selectedEvent.paypal_event_id],
-              ["Source", selectedEvent.source],
-              ["Order ID", selectedEvent.order_id],
-              ["PayPal order reference", selectedEvent.paypal_order_ref],
-              ["Resource ID", selectedEvent.resource_id],
-              ["Verification", selectedEvent.verification_status],
-              ["Duplicate delivery", selectedEvent.is_duplicate_delivery ? "Yes" : "No"],
-              ["Received at", formatDate(selectedEvent.delivery_received_at)],
-              ["Event created at", formatDate(selectedEvent.event_created_at)],
-              ["Processed at", formatDate(selectedEvent.processed_at)],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value == null || value === "" ? "Not available" : String(value)}</dd>
-              </div>
-            ))}
-          </dl>
+
+          <div className="evidence-card-grid">
+            <article className="evidence-card">
+              <h4>Event information</h4>
+              <dl>
+                <div>
+                  <dt>Event type</dt>
+                  <dd>{selectedEvent.event_type || "Unknown"}</dd>
+                </div>
+                <div>
+                  <dt>PayPal event ID</dt>
+                  <dd>{selectedEvent.paypal_event_id || "Not available"}</dd>
+                </div>
+                <div>
+                  <dt>Resource ID</dt>
+                  <dd>{selectedEvent.resource_id || "Not available"}</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article className="evidence-card">
+              <h4>Order relationship</h4>
+              <dl>
+                <div>
+                  <dt>Local order ID</dt>
+                  <dd>{selectedEvent.order_id ?? "Not linked"}</dd>
+                </div>
+                <div>
+                  <dt>PayPal order reference</dt>
+                  <dd>{selectedEvent.paypal_order_ref || "Not available"}</dd>
+                </div>
+                <div>
+                  <dt>Source</dt>
+                  <dd>{formatStatus(selectedEvent.source)}</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article className="evidence-card">
+              <h4>Verification</h4>
+              <dl>
+                <div>
+                  <dt>Verification status</dt>
+                  <dd>
+                    <StatusBadge value={selectedEvent.verification_status} />
+                  </dd>
+                </div>
+                <div>
+                  <dt>Duplicate delivery</dt>
+                  <dd>
+                    <StatusBadge
+                      value={
+                        selectedEvent.is_duplicate_delivery
+                          ? "duplicate"
+                          : "not_duplicate"
+                      }
+                    />
+                  </dd>
+                </div>
+              </dl>
+            </article>
+
+            <article className="evidence-card">
+              <h4>Event timestamps</h4>
+              <dl>
+                <div>
+                  <dt>Delivery received</dt>
+                  <dd>{formatDate(selectedEvent.delivery_received_at)}</dd>
+                </div>
+                <div>
+                  <dt>Event created</dt>
+                  <dd>{formatDate(selectedEvent.event_created_at)}</dd>
+                </div>
+                <div>
+                  <dt>Processed</dt>
+                  <dd>{formatDate(selectedEvent.processed_at)}</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
 
           <p className="detail-safety-note">
             Raw webhook payloads are not displayed. Verification metadata
@@ -627,6 +629,7 @@ function EventExplorer() {
                     <th>Details</th>
                   </tr>
                 </thead>
+
                 <tbody>
                   {events.map((item) => (
                     <tr key={item.id}>
@@ -661,7 +664,11 @@ function EventExplorer() {
             >
               Previous
             </button>
-            <span>Page {pageNumber} of {pageCount}</span>
+
+            <span>
+              Page {pageNumber} of {pageCount}
+            </span>
+
             <button
               type="button"
               className="refresh-button"
@@ -676,6 +683,7 @@ function EventExplorer() {
     </section>
   );
 }
+
 export default function App() {
   const [health, setHealth] = useState(null);
   const [incidents, setIncidents] = useState([]);
@@ -767,6 +775,7 @@ export default function App() {
 
         <details className="configuration-details">
           <summary>Configuration presence (values are never shown)</summary>
+
           {health?.config_present ? (
             <ConfigurationList config={health.config_present} />
           ) : (
@@ -824,7 +833,9 @@ export default function App() {
           </>
         )}
       </section>
+
       <EventExplorer />
+
       <footer className="page-footer">
         Always verify payment state with PayPal before taking action.
       </footer>
