@@ -1,7 +1,8 @@
-
 import logging
+import uuid
 from datetime import datetime
 from typing import Any
+from unittest.mock import patch
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.exc import IntegrityError
@@ -143,6 +144,16 @@ async def receive_paypal_webhook(
     if not isinstance(resource_id, str):
         resource_id = None
 
+    # For CHECKOUT.ORDER.* events, the resource itself is the order,
+    # so its id is the PayPal order ID. (For capture events, resource.id
+    # is the capture ID, so this fallback must not apply to them.)
+    if (
+        paypal_order_ref is None
+        and event_type.startswith("CHECKOUT.ORDER.")
+        and resource_id
+    ):
+        paypal_order_ref = resource_id
+
     order = None
 
     if paypal_order_ref:
@@ -245,3 +256,96 @@ async def receive_paypal_webhook(
         "status": "received",
         "event_id": event_id,
     }
+def _make_test_order(session_factory, paypal_order_id):
+    from decimal import Decimal
+
+    from app.models import Order, OrderStatus
+
+    with session_factory() as db:
+        order = Order(
+            paypal_order_id=paypal_order_id,
+            amount=Decimal("1.00"),
+            currency="USD",
+            status=OrderStatus.CREATED,
+            source=OrderSource.PAYPAL_SANDBOX,
+            idempotency_key=f"test-{uuid.uuid4().hex}",
+        )
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        return order.id
+
+
+def test_order_approved_event_links_to_order_by_resource_id(
+    client, valid_signature_headers
+):
+    test_client, session_factory = client
+    order_pk = _make_test_order(session_factory, "ORDER-TEST-APPROVED")
+
+    payload = {
+        "id": f"WH-TEST-{uuid.uuid4().hex}",
+        "event_type": "CHECKOUT.ORDER.APPROVED",
+        "create_time": "2026-10-25T08:00:00Z",
+        "resource": {"id": "ORDER-TEST-APPROVED", "status": "APPROVED"},
+    }
+
+    with (
+        patch.object(settings, "paypal_webhook_id", "sandbox-test-webhook"),
+        patch("app.routers.webhooks.PayPalClient") as mock_class,
+    ):
+        mock_class.return_value.verify_webhook_signature.return_value = True
+
+        response = test_client.post(
+            "/api/webhooks/paypal",
+            json=payload,
+            headers=valid_signature_headers,
+        )
+
+    assert response.status_code == 200
+
+    with session_factory() as db:
+        event = (
+            db.query(PaymentEvent)
+            .filter(PaymentEvent.paypal_event_id == payload["id"])
+            .one()
+        )
+        assert event.order_id == order_pk
+        assert event.paypal_order_ref == "ORDER-TEST-APPROVED"
+
+
+def test_capture_event_resource_id_is_not_used_as_order_id(
+    client, valid_signature_headers
+):
+    test_client, session_factory = client
+    _make_test_order(session_factory, "ORDER-TEST-CAPTURE-GUARD")
+
+    payload = {
+        "id": f"WH-TEST-{uuid.uuid4().hex}",
+        "event_type": "PAYMENT.CAPTURE.COMPLETED",
+        "create_time": "2026-10-25T08:00:00Z",
+        # For capture events this is the capture ID, never the order ID.
+        "resource": {"id": "ORDER-TEST-CAPTURE-GUARD", "status": "COMPLETED"},
+    }
+
+    with (
+        patch.object(settings, "paypal_webhook_id", "sandbox-test-webhook"),
+        patch("app.routers.webhooks.PayPalClient") as mock_class,
+    ):
+        mock_class.return_value.verify_webhook_signature.return_value = True
+
+        response = test_client.post(
+            "/api/webhooks/paypal",
+            json=payload,
+            headers=valid_signature_headers,
+        )
+
+    assert response.status_code == 200
+
+    with session_factory() as db:
+        event = (
+            db.query(PaymentEvent)
+            .filter(PaymentEvent.paypal_event_id == payload["id"])
+            .one()
+        )
+        assert event.order_id is None
+        assert event.paypal_order_ref is None
