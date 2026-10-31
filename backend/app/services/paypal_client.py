@@ -278,12 +278,12 @@ class PayPalClient:
             json=verification_payload,
         )
 
-        logger.info(
-            "PayPal verification response status: %s",
+        logger.warning(
+            "PAYPAL DIAGNOSTIC - verification status: %s",
             result.get("verification_status"),
         )
-        logger.info(
-            "PayPal verification response debug ID: %s",
+        logger.warning(
+            "PAYPAL DIAGNOSTIC - response debug ID: %s",
             result.get("debug_id"),
         )
 
