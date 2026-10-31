@@ -222,3 +222,105 @@ def create_order(
     return order_response.model_copy(
         update={"approval_url": approval_url}
     )
+    
+
+CAPTURE_STATUS_MAP = {
+    "COMPLETED": OrderStatus.COMPLETED,
+    "PENDING": OrderStatus.PENDING,
+    "DECLINED": OrderStatus.DECLINED,
+}
+
+
+@router.get("/{order_id}", response_model=OrderResponse)
+def get_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+) -> OrderResponse:
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    return OrderResponse.model_validate(order)
+
+
+@router.post("/{order_id}/capture", response_model=OrderResponse)
+def capture_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+) -> OrderResponse:
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+
+    # Already captured: return it without calling PayPal again.
+    if order.status == OrderStatus.COMPLETED:
+        return OrderResponse.model_validate(order)
+
+    client = PayPalClient()
+    try:
+        current = client.get_order(order.paypal_order_id)
+        paypal_status = current.get("status")
+
+        if paypal_status != "APPROVED":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Order is not approved yet (PayPal status: {paypal_status}). "
+                    "Approve it on the PayPal checkout page first."
+                ),
+            )
+
+        result = client.capture_order(order.paypal_order_id)
+    except PayPalError as exc:
+        logger.warning(
+            "PayPal capture error; uncertain=%s status_code=%s debug_id=%s",
+            exc.uncertain,
+            exc.status_code,
+            exc.debug_id,
+        )
+        if exc.uncertain:
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "PayPal capture outcome is uncertain. "
+                    "Check the order status before retrying."
+                ),
+            ) from exc
+        raise HTTPException(
+            status_code=502,
+            detail="PayPal could not capture the order.",
+        ) from exc
+    finally:
+        client.close()
+
+    captures = []
+    units = result.get("purchase_units")
+    if isinstance(units, list) and units:
+        captures = (units[0].get("payments") or {}).get("captures") or []
+
+    capture_status = captures[0].get("status") if captures else None
+    capture_id = captures[0].get("id") if captures else None
+    new_status = CAPTURE_STATUS_MAP.get(capture_status, OrderStatus.UNKNOWN)
+
+    try:
+        order.status = new_status
+        db.add(
+            AuditRecord(
+                actor="system",
+                action="paypal_sandbox_order_captured",
+                entity_type="order",
+                entity_id=str(order.id),
+                details_json={
+                    "paypal_order_id": order.paypal_order_id,
+                    "paypal_capture_id": capture_id,
+                    "capture_status": capture_status,
+                    "status": new_status.value,
+                },
+            )
+        )
+        db.commit()
+        db.refresh(order)
+    except Exception:
+        db.rollback()
+        raise
+
+    return OrderResponse.model_validate(order)
