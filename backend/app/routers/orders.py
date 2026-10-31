@@ -109,6 +109,14 @@ def create_order(
 
     paypal_order_id = paypal_response.get("id")
     paypal_status = paypal_response.get("status")
+    approval_url = next(
+        (
+            link.get("href")
+            for link in paypal_response.get("links", [])
+            if link.get("rel") == "approve"
+        ),
+        None,
+    )
 
     if not isinstance(paypal_order_id, str) or not paypal_order_id:
         raise HTTPException(
@@ -210,5 +218,7 @@ def create_order(
     except Exception:
         db.rollback()
         raise
-
-    return OrderResponse.model_validate(order)
+    order_response = OrderResponse.model_validate(order)
+    return order_response.model_copy(
+        update={"approval_url": approval_url}
+    )

@@ -29,7 +29,7 @@ class OrderResponse(BaseModel):
     updated_at: datetime
     last_verified_at: datetime | None
     last_verified_status: str | None
-
+    approval_url: str | None = None
 
 class PaymentEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
