@@ -278,6 +278,14 @@ class PayPalClient:
         )
 
         verification_status = result.get("verification_status")
+        logger.info(
+    "PayPal verification response status: %s",
+    result.get("verification_status"),
+)
+logger.info(
+    "PayPal verification response debug ID: %s",
+    result.get("debug_id"),
+)
 
         if verification_status != "SUCCESS":
             logger.warning(
