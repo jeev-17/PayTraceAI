@@ -223,6 +223,7 @@ class PayPalClient:
             f"/v2/checkout/orders/{paypal_order_id}",
         )
 
+    
     def verify_webhook_signature(
         self,
         headers: dict[str, str],
@@ -277,15 +278,16 @@ class PayPalClient:
             json=verification_payload,
         )
 
-        verification_status = result.get("verification_status")
         logger.info(
-    "PayPal verification response status: %s",
-    result.get("verification_status"),
-)
-logger.info(
-    "PayPal verification response debug ID: %s",
-    result.get("debug_id"),
-)
+            "PayPal verification response status: %s",
+            result.get("verification_status"),
+        )
+        logger.info(
+            "PayPal verification response debug ID: %s",
+            result.get("debug_id"),
+        )
+
+        verification_status = result.get("verification_status")
 
         if verification_status != "SUCCESS":
             logger.warning(
