@@ -203,3 +203,85 @@ def test_webhook_verification_service_failure_is_not_accepted(
 
     with session_factory() as db:
         assert db.query(PaymentEvent).count() == 0
+def test_duplicate_approved_event_repairs_missing_order_mapping(
+    client, valid_signature_headers
+):
+    from decimal import Decimal
+
+    from app.models import Order, OrderStatus
+
+    test_client, session_factory = client
+    paypal_order_id = "ORDER-TEST-REPAIR"
+    event_id = f"WH-TEST-{uuid.uuid4().hex}"
+
+    # Create an existing order.
+    with session_factory() as db:
+        order = Order(
+            paypal_order_id=paypal_order_id,
+            amount=Decimal("1.00"),
+            currency="USD",
+            status=OrderStatus.CREATED,
+            source=OrderSource.PAYPAL_SANDBOX,
+            idempotency_key=f"test-{uuid.uuid4().hex}",
+        )
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        order_pk = order.id
+
+    payload = {
+        "id": event_id,
+        "event_type": "CHECKOUT.ORDER.APPROVED",
+        "create_time": "2026-10-25T08:00:00Z",
+        "resource": {
+            "id": paypal_order_id,
+            "status": "APPROVED",
+        },
+    }
+
+    with (
+        patch.object(settings, "paypal_webhook_id", "sandbox-test-webhook"),
+        patch("app.routers.webhooks.PayPalClient") as mock_class,
+    ):
+        mock_class.return_value.verify_webhook_signature.return_value = True
+
+        # First delivery stores the event.
+        first = test_client.post(
+            "/api/webhooks/paypal",
+            json=payload,
+            headers=valid_signature_headers,
+        )
+
+        assert first.status_code == 200
+
+        # Simulate an older event with missing mapping fields.
+        with session_factory() as db:
+            event = (
+                db.query(PaymentEvent)
+                .filter(PaymentEvent.paypal_event_id == event_id)
+                .one()
+            )
+            event.order_id = None
+            event.paypal_order_ref = None
+            db.commit()
+
+        # Duplicate delivery should repair the mapping.
+        second = test_client.post(
+            "/api/webhooks/paypal",
+            json=payload,
+            headers=valid_signature_headers,
+        )
+
+    assert second.status_code == 200
+    assert second.json()["status"] == "duplicate"
+
+    with session_factory() as db:
+        event = (
+            db.query(PaymentEvent)
+            .filter(PaymentEvent.paypal_event_id == event_id)
+            .one()
+        )
+
+        assert event.order_id == order_pk
+        assert event.paypal_order_ref == paypal_order_id
+        assert db.query(PaymentEvent).count() == 1

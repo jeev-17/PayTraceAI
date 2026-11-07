@@ -173,6 +173,37 @@ async def receive_paypal_webhook(
     )
 
     if existing:
+        updated = False
+
+        # Repair older approval events that were stored without
+        # their PayPal order reference or internal order ID.
+        if existing.paypal_order_ref is None and paypal_order_ref:
+            existing.paypal_order_ref = paypal_order_ref
+            updated = True
+
+        if existing.order_id is None and order:
+            existing.order_id = order.id
+            updated = True
+
+        if updated:
+            try:
+                db.commit()
+                logger.info(
+                    "Existing PayPal webhook event mapping repaired. "
+                    "event_id=%s order_id=%s",
+                    event_id,
+                    existing.order_id,
+                )
+            except Exception:
+                db.rollback()
+                logger.exception(
+                    "Could not repair existing PayPal webhook event."
+                )
+                raise HTTPException(
+                    status_code=500,
+                    detail="Could not repair existing webhook event.",
+                )
+
         logger.info(
             "Duplicate PayPal webhook delivery ignored. event_id=%s",
             event_id,
