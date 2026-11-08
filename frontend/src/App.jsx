@@ -24,23 +24,51 @@ const configurationLabels = {
   pending_threshold_minutes: "Pending Threshold",
 };
 
-async function fetchJson(path) {
-  const response = await fetch(`${apiBaseUrl}${path}`);
 
-  if (!response.ok) {
-    throw new Error(`Request failed (${response.status}) for ${path}`);
+function getAdminHeaders(path, includeJson = false) {
+  const headers = includeJson
+    ? {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      }
+    : {
+        Accept: "application/json",
+      };
+
+  // Health checks remain public.
+  if (path !== "/api/health") {
+    const adminKey = sessionStorage.getItem("paytrace_admin_key");
+
+    if (adminKey) {
+      headers["X-Admin-Key"] = adminKey;
+    }
   }
 
-  return response.json();
+  return headers;
+}
+
+async function fetchJson(path) {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    headers: getAdminHeaders(path),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(
+      payload.error?.message ||
+      payload.detail ||
+      `Request failed (${response.status}) for ${path}`
+    );
+  }
+
+  return payload;
 }
 
 async function postJson(path, body) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
+    headers: getAdminHeaders(path, true),
     body: JSON.stringify(body),
   });
 
@@ -48,14 +76,15 @@ async function postJson(path, body) {
 
   if (!response.ok) {
     throw new Error(
-      typeof payload.detail === "string"
-        ? payload.detail
-        : `Request failed (${response.status})`
+      payload.error?.message ||
+      payload.detail ||
+      `Request failed (${response.status})`
     );
   }
 
   return payload;
 }
+
 
 function formatDate(value) {
   if (!value) return "Not available";
@@ -684,6 +713,61 @@ function EventExplorer() {
   );
 }
 
+function AdminLogin({ onLogin }) {
+  const [adminKey, setAdminKey] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+
+    if (!adminKey.trim()) {
+      setError("Please enter your admin key.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError("");
+
+    try {
+      await onLogin(adminKey.trim());
+    } catch (err) {
+      setError(err.message || "Authentication failed.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <main className="page">
+      <header className="page-header">
+        <h1>PayTrace AI</h1>
+        <p>Secure administrator access</p>
+      </header>
+
+      <section className="panel">
+        <h2>Admin Login</h2>
+        <p>Enter your administrator key to access the dashboard.</p>
+
+        <form onSubmit={handleSubmit}>
+          <input
+            type="password"
+            value={adminKey}
+            onChange={(event) => setAdminKey(event.target.value)}
+            placeholder="Enter admin key"
+            autoComplete="current-password"
+          />
+
+          {error && <p className="error-message">{error}</p>}
+
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Verifying..." : "Login"}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
 export default function App() {
   const [health, setHealth] = useState(null);
   const [incidents, setIncidents] = useState([]);
@@ -692,7 +776,29 @@ export default function App() {
   const [incidentsError, setIncidentsError] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    Boolean(sessionStorage.getItem("paytrace_admin_key"))
+  );
+    async function handleAdminLogin(adminKey) {
+    sessionStorage.setItem("paytrace_admin_key", adminKey);
 
+    try {
+      await fetchJson("/api/incidents");
+      setIsAuthenticated(true);
+    } catch (error) {
+      sessionStorage.removeItem("paytrace_admin_key");
+      throw new Error(
+        error.message || "Invalid admin key. Please try again."
+      );
+    }
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem("paytrace_admin_key");
+    setIsAuthenticated(false);
+    setIncidents([]);
+    setSelectedIncident(null);
+  }
   const loadDashboard = useCallback(async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
@@ -746,7 +852,10 @@ export default function App() {
   }, [loadDashboard]);
 
   return (
-    <main className="page">
+    !isAuthenticated ? (
+  <AdminLogin onLogin={handleAdminLogin} />
+) : (
+  <main className="page">
       <header className="page-header">
         <h1>PayTrace AI</h1>
         <p>
@@ -840,5 +949,6 @@ export default function App() {
         Always verify payment state with PayPal before taking action.
       </footer>
     </main>
+    )
   );
 }
