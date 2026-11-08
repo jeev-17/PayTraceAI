@@ -1,7 +1,8 @@
+
 import logging
 from contextlib import asynccontextmanager
-from app.routers import events
-from fastapi import FastAPI, Request
+
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -10,8 +11,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app import models  # noqa: F401 - register model metadata before table creation
 from app.config import settings
 from app.database import Base, engine
-from app.routers import incidents, orders, simulations, webhooks
+from app.routers import events, incidents, orders, simulations, webhooks
 from app.schemas import HealthResponse
+from app.security import require_admin
 
 logger = logging.getLogger(__name__)
 
@@ -35,16 +37,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Register API routers
-app.include_router(orders.router)
+# Protected dashboard and business API routes.
+admin_dependencies = [Depends(require_admin)]
+
+app.include_router(orders.router, dependencies=admin_dependencies)
+app.include_router(incidents.router, dependencies=admin_dependencies)
+app.include_router(simulations.router, dependencies=admin_dependencies)
+app.include_router(events.router, dependencies=admin_dependencies)
+
+# PayPal calls this endpoint directly.
+# Its existing PayPal signature verification remains mandatory.
 app.include_router(webhooks.router)
-app.include_router(incidents.router)
-app.include_router(simulations.router)
-app.include_router(events.router) 
 
-# Configure frontend access
-
-# Configure frontend access
+# Configure frontend access.
 allow_origins = {
     normalize_origin(settings.frontend_origin),
     "http://localhost:5173",
@@ -53,6 +58,7 @@ allow_origins = {
     "http://localhost:5176",
     "https://paytrace-ai-frontend.onrender.com",
 }
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(allow_origins),
@@ -60,7 +66,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 
 @app.exception_handler(StarletteHTTPException)
