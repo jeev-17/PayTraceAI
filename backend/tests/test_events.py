@@ -45,6 +45,9 @@ def client():
 
     try:
         with TestClient(app) as test_client:
+            test_client.headers.update(
+                {"X-Admin-Key": "test-admin-key"}
+            )
             yield test_client, TestSessionLocal
     finally:
         app.dependency_overrides.clear()

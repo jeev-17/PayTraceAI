@@ -638,3 +638,54 @@ li strong {
     grid-template-columns: 1fr;
   }
 }
+
+/* --------------------------------------------------
+   DASHBOARD HEADER AND LOGOUT BUTTON
+-------------------------------------------------- */
+
+.page-header {
+  width: min(100%, 1200px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin: 0 auto;
+}
+
+.page-header > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.page-header h1 {
+  margin-top: 0;
+}
+
+.page-header p {
+  line-height: 1.6;
+}
+
+.page-header .refresh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 100px;
+  min-height: 44px;
+  margin-left: auto;
+  position: relative;
+  z-index: 2;
+  visibility: visible;
+  opacity: 1;
+}
+
+@media (max-width: 600px) {
+  .page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .page-header .refresh-button {
+    margin-left: 0;
+  }
+}

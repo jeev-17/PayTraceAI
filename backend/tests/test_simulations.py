@@ -34,6 +34,9 @@ def client_and_db():
     app.dependency_overrides[get_db] = override_get_db
 
     with TestClient(app) as client:
+        client.headers.update(
+            {"X-Admin-Key": "test-admin-key"}
+        )
         yield client, TestingSessionLocal
 
     app.dependency_overrides.clear()
