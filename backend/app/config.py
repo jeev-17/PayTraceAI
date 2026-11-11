@@ -7,7 +7,9 @@ class Settings(BaseSettings):
     paypal_client_secret: str | None = None
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
     paypal_webhook_id: str | None = None
+
     admin_api_key: str | None = None
+    demo_admin_api_key: str | None = None
 
     database_url: str = "sqlite:///./paytrace.db"
     llm_provider: str | None = None
